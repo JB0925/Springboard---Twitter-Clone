@@ -6,7 +6,7 @@ from flask.helpers import url_for
 from sqlalchemy.exc import IntegrityError
 
 from forms import ProfileForm, UserAddForm, LoginForm, MessageForm
-from models import db, connect_db, User, Message
+from models import Likes, db, connect_db, User, Message
 
 CURR_USER_KEY = "curr_user"
 
@@ -124,7 +124,7 @@ def logout():
 ##############################################################################
 # General user routes:
 
-@app.route('/users')
+@app.route('/users', methods=['GET', 'POST'])
 def list_users():
     """Page with listing of users.
 
@@ -257,6 +257,34 @@ def delete_user():
     return redirect("/signup")
 
 
+@app.route('/users/add_like/<msg_id>', methods=['POST'])
+def add_like(msg_id):
+    user = User.query.get(session[CURR_USER_KEY])
+    message = Message.query.get(msg_id)
+
+    # Handle edge cases such as invalid message ids and user messages
+    if not message:
+        flash('Sorry, we could not find a Warble with the requested id.', 'danger')
+        return redirect(url_for('homepage'))
+    
+    if message.user_id == user.id:
+        flash('You can\'t like your own Warbles!', 'danger')
+        return redirect(url_for('homepage'))
+    
+    # Deleting a like if it exists
+    potential_like = Likes.query.filter_by(message_id=msg_id).first()
+    if potential_like:
+        db.session.delete(potential_like)
+        db.session.commit()
+        return redirect(url_for('homepage'))
+    
+    # If we have passed all other checks, we save the "like" to the database
+    like = Likes(user_id=user.id, message_id=message.id)
+    db.session.add(like)
+    db.session.commit()
+    return redirect(url_for('homepage'))
+
+
 ##############################################################################
 # Messages routes:
 
@@ -320,16 +348,11 @@ def homepage():
 
     if g.user:
         user = User.query.get(session[CURR_USER_KEY])
-        following_ids = [f.id for f in user.following]
-        following_ids.append(user.id)
-    
-        messages = [msg for msg in Message
-                    .query
-                    .order_by(Message.timestamp.desc())
-                    .limit(100)
-                    .all() if msg.user_id in following_ids]
+        messages = [msg for u in user.following for msg in u.messages]
+        messages.extend([msg for msg in user.messages])
+        messages = reversed(sorted(messages, key=lambda m: m.timestamp))
 
-        return render_template('home.html', messages=messages)
+        return render_template('home.html', messages=messages, user=user)
 
     else:
         return render_template('home-anon.html')
