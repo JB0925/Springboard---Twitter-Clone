@@ -5,7 +5,7 @@ from flask.helpers import url_for
 # from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
-from forms import UserAddForm, LoginForm, MessageForm
+from forms import ProfileForm, UserAddForm, LoginForm, MessageForm
 from models import db, connect_db, User, Message
 
 CURR_USER_KEY = "curr_user"
@@ -216,7 +216,29 @@ def stop_following(follow_id):
 def profile():
     """Update profile for current user."""
 
-    # IMPLEMENT THIS
+    if not g.user:
+        flash('Access unauthorized.', 'danger')
+        return redirect(url_for('login'))
+    
+    form = ProfileForm()
+    user = User.query.get(session[CURR_USER_KEY])
+
+    if form.validate_on_submit():
+        if User.authenticate(user.username, form.password.data):
+            user.username = form.username.data
+            user.email = form.email.data
+            if form.image_url.data:
+                user.image_url = form.image_url.data
+            if form.header_image_url.data:
+                user.header_image_url = form.header_image_url.data
+            user.bio = form.bio.data
+            db.session.add(user)
+            db.session.commit()
+            return redirect(url_for('users_show', user_id=user.id))
+        flash('We\'re sorry, the password you entered did not match your registered password.', 'danger')
+        return redirect(url_for('homepage'))
+    
+    return render_template('users/edit.html', form=form)
 
 
 @app.route('/users/delete', methods=["POST"])
@@ -297,11 +319,15 @@ def homepage():
     """
 
     if g.user:
-        messages = (Message
+        user = User.query.get(session[CURR_USER_KEY])
+        following_ids = [f.id for f in user.following]
+        following_ids.append(user.id)
+    
+        messages = [msg for msg in Message
                     .query
                     .order_by(Message.timestamp.desc())
                     .limit(100)
-                    .all())
+                    .all() if msg.user_id in following_ids]
 
         return render_template('home.html', messages=messages)
 
