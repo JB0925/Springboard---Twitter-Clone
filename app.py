@@ -315,6 +315,8 @@ def messages_add():
 
     if form.validate_on_submit():
         msg = Message(text=form.text.data)
+        if msg.user_id != g.user.id:
+            return redirect(url_for('messages_add'))
         g.user.messages.append(msg)
         db.session.commit()
 
@@ -340,6 +342,8 @@ def messages_destroy(message_id):
         return redirect("/")
 
     msg = Message.query.get(message_id)
+    if msg.user_id != g.user.id:
+        return redirect(url_for('homepage'))
     db.session.delete(msg)
     db.session.commit()
 
