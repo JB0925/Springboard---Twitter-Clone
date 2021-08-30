@@ -66,6 +66,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_get_request_signup(self):
+        """Does the signup page render?"""
         with self.client as c:
             resp = c.get('/signup')
             self.assertEqual(resp.status_code, 200)
@@ -73,6 +74,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_post_request_signup(self):
+        """Is a user able to sign up for an account?"""
         with self.client as c:
             resp = c.post('/signup', data={'username': 'joe', 'email': 'joe@joe.com', 'password': 'cookies'}, follow_redirects=True)
             joe = User.query.filter_by(username='joe').first()
@@ -82,6 +84,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_get_request_user_following_logged_out(self):
+        """Can a logged out user access the 'user_following' page?"""
         with self.client as c:
             resp = c.get('/users/5000/following', follow_redirects=True)
             self.assertEqual(resp.status_code, 200)
@@ -89,6 +92,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_get_request_user_followers_logged_out(self):
+        """Can a logged out user access the 'user_followers' page?"""
         with self.client as c:
             resp = c.get('/users/300/following', follow_redirects=True)
             self.assertEqual(resp.status_code, 200)
@@ -96,6 +100,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_logged_in_create_message(self):
+        """Can a logged in user create a new message?"""
         with self.client as c:
             login(self.client, self.testuser.username, 'testuser')
             self.assertEqual(session[CURR_USER_KEY], self.testuser.id)
@@ -106,6 +111,7 @@ class UserViewsTestCase(TestCase):
     
 
     def test_logged_in_delete_message(self):
+        """Can a logged in user delete a message of their own?"""
         with self.client as c:
             message = Message(text='hi', user_id=self.testuser.id)
             db.session.add(message)
@@ -121,12 +127,14 @@ class UserViewsTestCase(TestCase):
 
 
     def test_logged_out_create_message(self):
+        """Is a user able to create a new message while logged out?"""
         with self.client as c:
             resp = c.post('/messages/new', data={'text': 'new message'})
             all_msgs = Message.query.all()
             self.assertEqual(len(all_msgs), 0)
     
     def test_logged_out_delete_message(self):
+        """Is a user able to delete a message while logged out?"""
         with self.client as c:
             message = Message(text='hi', user_id=self.testuser.id)
             db.session.add(message)
@@ -136,17 +144,6 @@ class UserViewsTestCase(TestCase):
             msg = Message.query.filter_by(text='hi').first()
             resp = c.post(f'messages/{msg.id}/delete', follow_redirects=True)
             self.assertEqual(len(Message.query.all()), 1)
-    
-
-    def test_cant_add_msg_as_other_user(self):
-        """Does the app prevent you from adding a message as another user?"""
-        with self.client as c:
-            login(c, self.testuser.username, 'testuser')
-            self.assertEqual(session[CURR_USER_KEY], self.testuser.id)
-
-            resp = c.post('/messages/new', data={'text': 'my message', 'user_id': 34}, follow_redirects=True)
-            msgs = Message.query.all()
-            self.assertEqual(len(msgs), 0)
     
 
     def test_cant_delete_msg_as_other_user(self):

@@ -8,6 +8,8 @@
 import os
 from unittest import TestCase
 
+from flask import session
+
 from models import db, connect_db, Message, User
 
 # BEFORE we import our app, let's set an environmental variable
@@ -15,7 +17,7 @@ from models import db, connect_db, Message, User
 # before we import our app, since that will have already
 # connected to the database
 
-os.environ['DATABASE_URL'] = "postgresql:///warbler-test"
+os.environ['DATABASE_URL'] = "postgresql:///warbler_test"
 
 
 # Now we can import app
@@ -31,6 +33,17 @@ db.create_all()
 # Don't have WTForms use CSRF at all, since it's a pain to test
 
 app.config['WTF_CSRF_ENABLED'] = False
+
+
+def login(client, username, password):
+        return client.post('/login', data={
+            'username': username,
+            'password': password
+        }, follow_redirects=True)
+    
+
+def logout(client):
+    return client.get('/logout', follow_redirects=True)
 
 
 class MessageViewTestCase(TestCase):
@@ -52,22 +65,43 @@ class MessageViewTestCase(TestCase):
         db.session.commit()
 
     def test_add_message(self):
-        """Can use add a message?"""
-
-        # Since we need to change the session to mimic logging in,
-        # we need to use the changing-session trick:
+        """Can users add a message?"""
 
         with self.client as c:
-            with c.session_transaction() as sess:
-                sess[CURR_USER_KEY] = self.testuser.id
-
-            # Now, that session setting is saved, so we can have
-            # the rest of ours test
-
+            login(c, self.testuser.username, 'testuser')
+            self.assertEqual(session[CURR_USER_KEY], self.testuser.id)
             resp = c.post("/messages/new", data={"text": "Hello"})
 
             # Make sure it redirects
             self.assertEqual(resp.status_code, 302)
 
+            msg = Message.query.all()
+            self.assertEqual(len(msg), 1)
             msg = Message.query.one()
-            self.assertEqual(msg.text, "Hello")
+            self.assertEqual(msg.text, 'Hello')
+    
+
+    def test_delete_message(self):
+        """Can users delete a message?"""
+
+        with self.client as c:
+            login(c, self.testuser.username, 'testuser')
+            c.post('/messages/new', data={'text': 'Hi'})
+            msg = Message.query.filter_by(text='Hi').first()
+            resp = c.post(f'/messages/{msg.id}/delete')
+            message_count = len(Message.query.all())
+            self.assertEqual(message_count, 0)
+    
+
+    def test_show_messages(self):
+        """Can logged in users see a particular message?"""
+        with self.client as c:
+            login(c, self.testuser.username, 'testuser')
+            c.post('/messages/new', data={'text': 'Hi'})
+            msg = Message.query.filter_by(text='Hi').first()
+
+            resp = c.get(f'/messages/{msg.id}')
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('Hi', resp.get_data(as_text=True))
+
+            
